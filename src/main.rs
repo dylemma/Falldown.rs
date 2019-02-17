@@ -4,6 +4,7 @@ extern crate serde;
 
 mod falldown;
 mod systems;
+mod util;
 
 use crate::falldown::Running;
 
@@ -36,7 +37,8 @@ fn main() -> amethyst::Result<()> {
             .with_sprite_sheet_processor()
         )?
         .with_bundle(TransformBundle::new())?
-        .with(systems::FallingObjectSystem, "falling_objects", &[])
+        .with(systems::SpawnerSystem, "spawner", &[])
+        .with(systems::FallingObjectSystem, "falling_objects", &["spawner"])
     ;
     let mut game = Application::new("./", Running, game_data)?;
 

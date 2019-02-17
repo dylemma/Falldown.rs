@@ -1,16 +1,14 @@
-pub struct Block;
-
 use amethyst::{
     assets::{Asset, AssetStorage, Handle, Loader, ProcessingState, RonFormat},
     core::transform::Transform,
     Error,
-    ecs::prelude::{Component, VecStorage},
+    ecs::prelude::{Component, DenseVecStorage, VecStorage},
     prelude::*,
     renderer::{
         Camera, PngFormat, Projection, Rgba, SpriteRender, SpriteSheet, SpriteSheetFormat, SpriteSheetHandle, Texture, TextureMetadata,
     }
 };
-use rand::{Rng, thread_rng};
+use rand::{seq::SliceRandom, thread_rng};
 use serde::{Serialize, Deserialize};
 
 pub const ARENA_HEIGHT: f32 = 300.;
@@ -30,38 +28,79 @@ impl Component for FallingObject {
 
 // ------------------------------------
 
+pub struct Spawner {
+    spawn_rate: f32,
+    spawn_countdown: f32,
+    sprite: SpriteRender,
+}
+impl Spawner {
+    pub fn new(spawn_rate: f32, sprite: SpriteRender) -> Spawner {
+        Spawner {
+            spawn_rate,
+            spawn_countdown: spawn_rate,
+            sprite,
+        }
+    }
+
+    /// Advance the spawn countdown by the given `time`.
+    /// Returns `true` if the countdown reached 0 and
+    /// was reset.
+    pub fn advance_and_reset(&mut self, time: f32) -> bool {
+        self.spawn_countdown -= time;
+        if self.spawn_countdown <= 0.0 {
+            self.spawn_countdown = self.spawn_rate;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn sprite(&self) -> SpriteRender {
+        self.sprite.clone()
+    }
+}
+impl Component for Spawner {
+    type Storage = DenseVecStorage<Self>;
+}
+
+// ------------------------------------
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ColorPallatte {
     colors: Vec<Rgba>,
 }
 impl ColorPallatte {
-    fn new(colors: Vec<Rgba>) -> ColorPallatte {
+    pub fn new(colors: Vec<Rgba>) -> ColorPallatte {
         ColorPallatte { colors }
     }
-    fn next_random(&self) -> Rgba {
-        match thread_rng().choose(&self.colors) {
+    pub fn next_random(&self) -> Rgba {
+        match self.colors.choose(&mut thread_rng() ) {
+//        match thread_rng().choose(&self.colors) {
             Some(color) => *color,
             None => Default::default()
         }
     }
 }
-//impl Default for ColorPallatte {
-//    fn default() -> Self {
-//        ColorPallatte {
-//            colors: vec![Rgba::red(), Rgba::green(), Rgba::blue()],
-//        }
-//    }
-//}
-//impl Asset for ColorPallatte {
-//    const NAME: &'static str = "falldown::ColorPallatte";
-//    type Data = Self;
-//    type HandleStorage = VecStorage<Handle<Self>>;
-//}
-//impl From<ColorPallatte> for Result<ProcessingState<ColorPallatte>, Error> {
-//    fn from(p: ColorPallatte) -> Self {
-//        Ok(ProcessingState::Loaded(p))
-//    }
-//}
+impl Default for ColorPallatte {
+    fn default() -> Self {
+        ColorPallatte {
+            colors: vec![Rgba::red(), Rgba::green(), Rgba::blue()],
+        }
+    }
+}
+impl Component for ColorPallatte {
+    type Storage = DenseVecStorage<Self>;
+}
+impl Asset for ColorPallatte {
+    const NAME: &'static str = "falldown::ColorPallatte";
+    type Data = Self;
+    type HandleStorage = VecStorage<Handle<Self>>;
+}
+impl From<ColorPallatte> for Result<ProcessingState<ColorPallatte>, Error> {
+    fn from(p: ColorPallatte) -> Self {
+        Ok(ProcessingState::Loaded(p))
+    }
+}
 
 // ------------------------------------
 
@@ -71,17 +110,16 @@ impl SimpleState for Running {
     fn on_start(&mut self, data: StateData<'_, GameData<'_, '_>>) {
         let StateData { world, .. } = data;
 
-        let color_pallatte = init_color_pallatte();
         let spritesheet_handle = load_sprite_sheet(world);
         // let color_pallatte_handle = load_color_pallatte(world);
 
         init_camera(world);
-        init_dummy_sprite(world, spritesheet_handle, &color_pallatte);
+        init_spawner(world, spritesheet_handle);
     }
 }
 
-fn init_color_pallatte() -> ColorPallatte {
-    ColorPallatte {
+fn init_spawner(world: &mut World, sprite_sheet: SpriteSheetHandle) {
+    let pallatte = ColorPallatte {
         colors: vec![
             Rgba(0.196, 0.804, 0.196, 1.0), // lime green
             Rgba(0.000, 0.749, 1.000, 1.0), // deep sky blue
@@ -89,7 +127,15 @@ fn init_color_pallatte() -> ColorPallatte {
             Rgba(0.598, 0.195, 0.797, 1.0), // darkorchid
             Rgba(0.926, 0.078, 0.238, 1.0), // crimson
         ]
-    }
+    };
+    let sprite = SpriteRender {
+        sprite_sheet,
+        sprite_number: 0
+    };
+    world.create_entity()
+        .with(pallatte)
+        .with(Spawner::new(0.333, sprite))
+        .build();
 }
 
 fn load_sprite_sheet(world: &mut World) -> SpriteSheetHandle {
@@ -135,38 +181,4 @@ fn init_camera(world: &mut World) {
         .with(Camera::from(Projection::orthographic(0.0, ARENA_WIDTH, 0.0, ARENA_HEIGHT)))
         .with(transform)
         .build();
-}
-
-fn init_dummy_sprite(world: &mut World, sprite_sheet: SpriteSheetHandle, pallatte: &ColorPallatte) {
-
-    let sprite_render = SpriteRender {
-        sprite_sheet,
-        sprite_number: 0,
-    };
-    let mut rng = thread_rng();
-
-    for _ in 0..10 {
-        let mut transform = Transform::default();
-        let y_offset: f32 = rng.gen();
-        let x_offset: f32 = rng.gen();
-        transform
-            .set_rotation_euler(0., 0., 3.14 / 4.0)
-            .set_xyz(ARENA_WIDTH * x_offset, ARENA_HEIGHT * y_offset, 0.);
-
-        let falling = FallingObject {
-            fall_rate: 40.0,
-            radius: 5.0, // half of the sprite size
-            spin_rate: 3.1415 * 1.5, // 3/4 turn per second
-        };
-
-        let color = pallatte.next_random();
-
-        world
-            .create_entity()
-            .with(transform)
-            .with(sprite_render.clone())
-            .with(color)
-            .with(falling)
-            .build();
-    }
 }
