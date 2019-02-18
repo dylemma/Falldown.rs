@@ -20,11 +20,9 @@ use amethyst::{
 fn main() -> amethyst::Result<()> {
     amethyst::start_logger(Default::default());
 
-    let path = format!(
-        "{}/resources/display_config.ron",
-        application_root_dir()
-    );
-    let config = DisplayConfig::load(&path);
+    let app_root = application_root_dir()?;
+
+    let config = DisplayConfig::load(app_root.join("resources/display_config.ron"));
 
     let pipe = Pipeline::build().with_stage(
         Stage::with_backbuffer()
@@ -33,14 +31,17 @@ fn main() -> amethyst::Result<()> {
     );
 
     let game_data = GameDataBuilder::default()
+        .with_bundle(TransformBundle::new())?
         .with_bundle(RenderBundle::new(pipe, Some(config))
             .with_sprite_sheet_processor()
+            .with_sprite_visibility_sorting(&["transform_system"])
         )?
-        .with_bundle(TransformBundle::new())?
         .with(systems::SpawnerSystem, "spawner", &[])
         .with(systems::FallingObjectSystem, "falling_objects", &["spawner"])
     ;
-    let mut game = Application::new("./", Running, game_data)?;
+
+    let assets_director = app_root; // TODO change this
+    let mut game = Application::new(assets_director, Running, game_data)?;
 
     game.run();
 

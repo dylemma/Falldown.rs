@@ -1,11 +1,12 @@
 use amethyst::{
-    assets::{Asset, AssetStorage, Handle, Loader, ProcessingState, RonFormat},
+    assets::{Asset, AssetStorage, Handle, Loader, ProcessingState},
     core::transform::Transform,
     Error,
     ecs::prelude::{Component, DenseVecStorage, VecStorage},
     prelude::*,
     renderer::{
-        Camera, PngFormat, Projection, Rgba, SpriteRender, SpriteSheet, SpriteSheetFormat, SpriteSheetHandle, Texture, TextureMetadata,
+        Camera, PngFormat, Projection, Rgba, SpriteRender, SpriteSheet, SpriteSheetFormat,
+        SpriteSheetHandle, Texture, TextureMetadata, Transparent,
     }
 };
 use rand::{seq::SliceRandom, thread_rng};
@@ -114,7 +115,8 @@ impl SimpleState for Running {
         // let color_pallatte_handle = load_color_pallatte(world);
 
         init_camera(world);
-        init_spawner(world, spritesheet_handle);
+        init_spawner(world, spritesheet_handle.clone());
+        init_player(world, spritesheet_handle);
     }
 }
 
@@ -134,7 +136,7 @@ fn init_spawner(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     };
     world.create_entity()
         .with(pallatte)
-        .with(Spawner::new(0.333, sprite))
+        .with(Spawner::new(0.03, sprite))
         .build();
 }
 
@@ -180,5 +182,21 @@ fn init_camera(world: &mut World) {
     world.create_entity()
         .with(Camera::from(Projection::orthographic(0.0, ARENA_WIDTH, 0.0, ARENA_HEIGHT)))
         .with(transform)
+        .build();
+}
+
+fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
+    let mut transform = Transform::default();
+    transform.set_xyz(ARENA_WIDTH * 0.5, ARENA_HEIGHT * 0.15, 0.1);
+
+    let sprite = SpriteRender {
+        sprite_sheet,
+        sprite_number: 1, // player sprite
+    };
+
+    world.create_entity()
+        .with(transform)
+        .with(Transparent)
+        .with(sprite)
         .build();
 }

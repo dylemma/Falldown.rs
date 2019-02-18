@@ -48,7 +48,7 @@ impl<'s> System<'s> for SpawnerSystem {
 
                 // randomize the falling object's speed and spin
                 let object = FallingObject {
-                    fall_rate: rng.gen_range(30.0, 60.0),
+                    fall_rate: rng.gen_range(60.0, 120.0),
                     spin_rate: rng.gen_range(0.25, 1.5) * PI * rng.plus_or_minus(1.0),
                     radius: SPAWNED_OBJECT_RADIUS,
                 };
