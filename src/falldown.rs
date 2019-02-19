@@ -8,7 +8,7 @@ use amethyst::{
         },
     },
     Error,
-    ecs::prelude::{Component, DenseVecStorage, HashMapStorage, NullStorage, VecStorage},
+    ecs::prelude::{Component, DenseVecStorage, HashMapStorage, VecStorage},
     prelude::*,
     renderer::{
         Camera, PngFormat, Projection, Rgba, SpriteRender, SpriteSheet, SpriteSheetFormat,
@@ -17,9 +17,7 @@ use amethyst::{
 };
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Serialize, Deserialize};
-use std::f32::consts::FRAC_PI_4;
 use std::collections::VecDeque;
-use std::collections::vec_deque::Iter;
 
 pub const ARENA_HEIGHT: f32 = 300.;
 pub const ARENA_WIDTH: f32 = 300.;
@@ -35,6 +33,17 @@ pub struct FallingObject {
 
 impl Component for FallingObject {
     type Storage = VecStorage<Self>;
+}
+
+// ------------------------------------
+
+pub struct FollowMouse {
+    pub x_ratio: f32,
+    pub y_ratio: f32,
+}
+
+impl Component for FollowMouse {
+    type Storage = DenseVecStorage<Self>;
 }
 
 // ------------------------------------
@@ -136,7 +145,6 @@ impl ColorPallatte {
     }
     pub fn next_random(&self) -> Rgba {
         match self.colors.choose(&mut thread_rng()) {
-//        match thread_rng().choose(&self.colors) {
             Some(color) => *color,
             None => Default::default()
         }
@@ -180,7 +188,8 @@ impl SimpleState for Running {
 
         init_camera(world);
         init_spawner(world, spritesheet_handle.clone());
-        init_player(world, spritesheet_handle);
+        init_player(world, spritesheet_handle.clone());
+        init_cursor(world, spritesheet_handle)
     }
 }
 
@@ -228,18 +237,6 @@ fn load_sprite_sheet(world: &mut World) -> SpriteSheetHandle {
     )
 }
 
-//fn load_color_pallatte(world: &mut World) -> Handle<ColorPallatte> {
-//    let loader = world.read_resource::<Loader>();
-//    let pallatte_storage = world.read_resource::<AssetStorage<ColorPallatte>>();
-//    loader.load(
-//        "theme/color_pallatte.ron",
-//        RonFormat,
-//        (),
-//        (),
-//        &pallatte_storage
-//    )
-//}
-
 fn init_camera(world: &mut World) {
     let mut transform = Transform::default();
     transform.set_z(1.0);
@@ -252,20 +249,17 @@ fn init_camera(world: &mut World) {
 fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     let mut transform = Transform::default();
     transform.set_xyz(ARENA_WIDTH * 0.5, ARENA_HEIGHT * 0.15, 0.1);
-    transform.set_rotation_euler(0.0, 0.0, FRAC_PI_4 * 0.5);
 
     let sprite = SpriteRender {
         sprite_sheet,
         sprite_number: 1, // player sprite
     };
 
-//    let move_target = crate::systems::MoveTarget::new(transform.translation().clone())
-//        .with_spring_factors(0.3, 0.0, 0.0);
 
     // Player
     let player = world.create_entity()
         .with(Player::new())
-        .with(crate::systems::FollowMouse {
+        .with(FollowMouse {
             x_ratio: 0.9,
             y_ratio: 0.0,
         })
@@ -283,4 +277,51 @@ fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
         .with(sprite)
         .with(Parent { entity: player })
         .build();
+}
+
+fn init_cursor(world: &mut World, sprite_sheet: SpriteSheetHandle) {
+    let sprite = SpriteRender {
+        sprite_sheet,
+        sprite_number: 2, // 1 pixel thing
+    };
+
+    // Vertical Line that only follows the X position of the mouse
+    {
+        let mut transform = Transform::default();
+        transform.set_scale(1.0, ARENA_HEIGHT, 1.0);
+        transform.set_x(ARENA_WIDTH * 0.5);
+        transform.set_y(ARENA_HEIGHT * 0.5);
+
+
+        let follow_mouse = FollowMouse {
+            x_ratio: 1.0,
+            y_ratio: 0.0,
+        };
+
+        world.create_entity()
+            .with(transform)
+            .with(Transparent)
+            .with(sprite.clone())
+            .with(follow_mouse)
+            .build();
+    }
+
+    // Horizontal Line that only follows the Y position of the mouse
+    {
+        let mut transform = Transform::default();
+        transform.set_scale(ARENA_WIDTH, 1.0, 1.0);
+        transform.set_xyz(ARENA_WIDTH * 0.5, ARENA_HEIGHT * 0.5, 0.0);
+
+        let follow_mouse = FollowMouse {
+            x_ratio: 0.0,
+            y_ratio: 1.0,
+        };
+
+        world.create_entity()
+            .with(transform)
+            .with(Transparent)
+            .with(sprite.clone())
+            .with(follow_mouse)
+            .build();
+    }
 }
