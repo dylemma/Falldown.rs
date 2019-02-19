@@ -9,9 +9,11 @@ mod util;
 use crate::falldown::Running;
 
 use amethyst::{
+    controls::{MouseFocusUpdateSystem, CursorHideSystem},
     core:: {
         transform::TransformBundle,
     },
+    input::InputBundle,
     prelude::*,
     renderer::{DisplayConfig, DrawFlat2D, Pipeline, RenderBundle, Stage},
     utils::application_root_dir,
@@ -31,6 +33,9 @@ fn main() -> amethyst::Result<()> {
     );
 
     let game_data = GameDataBuilder::default()
+        .with_bundle(
+            InputBundle::<String, String>::new()
+        )?
         .with_bundle(TransformBundle::new())?
         .with_bundle(RenderBundle::new(pipe, Some(config))
             .with_sprite_sheet_processor()
@@ -38,10 +43,17 @@ fn main() -> amethyst::Result<()> {
         )?
         .with(systems::SpawnerSystem, "spawner", &[])
         .with(systems::FallingObjectSystem, "falling_objects", &["spawner"])
+        //.with(systems::PlayerMovementSystem, "player_movement", &[])
+        .with(systems::FollowMouseSystem, "follow_mouse", &[])
+        .with(systems::PlayerRotateSystem, "player_rotate", &["follow_mouse"])
+       // .with(systems::MoveTargetSystem, "move_target_system", &[])
+//        .with(systems::MouseMovementSystem::new(), "mouse_movement", &[])
+        .with(MouseFocusUpdateSystem::new(), "mouse_focus", &[])
+        .with(CursorHideSystem::new(), "cursor_hide", &["mouse_focus"])
     ;
 
-    let assets_director = app_root; // TODO change this
-    let mut game = Application::new(assets_director, Running, game_data)?;
+    let assets_directory = app_root.join("assets");
+    let mut game = Application::new(assets_directory, Running, game_data)?;
 
     game.run();
 

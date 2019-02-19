@@ -1,16 +1,25 @@
 use amethyst::{
     assets::{Asset, AssetStorage, Handle, Loader, ProcessingState},
-    core::transform::Transform,
+    core::{
+        nalgebra::Vector3,
+        transform::{
+            components::Parent,
+            Transform,
+        },
+    },
     Error,
-    ecs::prelude::{Component, DenseVecStorage, VecStorage},
+    ecs::prelude::{Component, DenseVecStorage, HashMapStorage, NullStorage, VecStorage},
     prelude::*,
     renderer::{
         Camera, PngFormat, Projection, Rgba, SpriteRender, SpriteSheet, SpriteSheetFormat,
         SpriteSheetHandle, Texture, TextureMetadata, Transparent,
-    }
+    },
 };
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Serialize, Deserialize};
+use std::f32::consts::FRAC_PI_4;
+use std::collections::VecDeque;
+use std::collections::vec_deque::Iter;
 
 pub const ARENA_HEIGHT: f32 = 300.;
 pub const ARENA_WIDTH: f32 = 300.;
@@ -23,8 +32,56 @@ pub struct FallingObject {
     pub spin_rate: f32,
     pub radius: f32,
 }
+
 impl Component for FallingObject {
     type Storage = VecStorage<Self>;
+}
+
+// ------------------------------------
+
+//#[derive(Default)]
+pub struct Player {
+    pub trail: MovementTrail,
+}
+
+impl Player {
+    fn new() -> Player {
+        Player {
+            trail: MovementTrail::new(3),
+        }
+    }
+}
+
+impl Component for Player {
+    type Storage = HashMapStorage<Self>;
+}
+
+// ------------------------------------
+
+pub struct MovementTrail {
+    capacity: usize,
+    trail: VecDeque<Vector3<f32>>,
+}
+
+impl MovementTrail {
+    pub fn new(capacity: usize) -> MovementTrail {
+        MovementTrail {
+            capacity,
+            trail: VecDeque::with_capacity(capacity),
+        }
+    }
+
+    pub fn push(&mut self, pos: Vector3<f32>) {
+        if self.trail.len() >= self.capacity {
+            self.trail.pop_front();
+        }
+        self.trail.push_back(pos);
+    }
+
+    pub fn oldest(&self) -> Option<&Vector3<f32>> {
+        self.trail.front()
+    }
+
 }
 
 // ------------------------------------
@@ -34,6 +91,7 @@ pub struct Spawner {
     spawn_countdown: f32,
     sprite: SpriteRender,
 }
+
 impl Spawner {
     pub fn new(spawn_rate: f32, sprite: SpriteRender) -> Spawner {
         Spawner {
@@ -60,6 +118,7 @@ impl Spawner {
         self.sprite.clone()
     }
 }
+
 impl Component for Spawner {
     type Storage = DenseVecStorage<Self>;
 }
@@ -70,18 +129,20 @@ impl Component for Spawner {
 pub struct ColorPallatte {
     colors: Vec<Rgba>,
 }
+
 impl ColorPallatte {
     pub fn new(colors: Vec<Rgba>) -> ColorPallatte {
         ColorPallatte { colors }
     }
     pub fn next_random(&self) -> Rgba {
-        match self.colors.choose(&mut thread_rng() ) {
+        match self.colors.choose(&mut thread_rng()) {
 //        match thread_rng().choose(&self.colors) {
             Some(color) => *color,
             None => Default::default()
         }
     }
 }
+
 impl Default for ColorPallatte {
     fn default() -> Self {
         ColorPallatte {
@@ -89,14 +150,17 @@ impl Default for ColorPallatte {
         }
     }
 }
+
 impl Component for ColorPallatte {
     type Storage = DenseVecStorage<Self>;
 }
+
 impl Asset for ColorPallatte {
     const NAME: &'static str = "falldown::ColorPallatte";
     type Data = Self;
     type HandleStorage = VecStorage<Handle<Self>>;
 }
+
 impl From<ColorPallatte> for Result<ProcessingState<ColorPallatte>, Error> {
     fn from(p: ColorPallatte) -> Self {
         Ok(ProcessingState::Loaded(p))
@@ -132,7 +196,7 @@ fn init_spawner(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     };
     let sprite = SpriteRender {
         sprite_sheet,
-        sprite_number: 0
+        sprite_number: 0,
     };
     world.create_entity()
         .with(pallatte)
@@ -145,7 +209,7 @@ fn load_sprite_sheet(world: &mut World) -> SpriteSheetHandle {
         let loader = world.read_resource::<Loader>();
         let texture_storage = world.read_resource::<AssetStorage<Texture>>();
         loader.load(
-            "assets/texture/falldown_spritesheet.png",
+            "texture/falldown_spritesheet.png",
             PngFormat,
             TextureMetadata::srgb_scale(),
             (),
@@ -156,7 +220,7 @@ fn load_sprite_sheet(world: &mut World) -> SpriteSheetHandle {
     let loader = world.read_resource::<Loader>();
     let sprite_sheet_store = world.read_resource::<AssetStorage<SpriteSheet>>();
     loader.load(
-        "assets/texture/falldown_spritesheet.ron",
+        "texture/falldown_spritesheet.ron",
         SpriteSheetFormat,
         texture_handle,
         (),
@@ -168,7 +232,7 @@ fn load_sprite_sheet(world: &mut World) -> SpriteSheetHandle {
 //    let loader = world.read_resource::<Loader>();
 //    let pallatte_storage = world.read_resource::<AssetStorage<ColorPallatte>>();
 //    loader.load(
-//        "assets/theme/color_pallatte.ron",
+//        "theme/color_pallatte.ron",
 //        RonFormat,
 //        (),
 //        (),
@@ -188,15 +252,35 @@ fn init_camera(world: &mut World) {
 fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     let mut transform = Transform::default();
     transform.set_xyz(ARENA_WIDTH * 0.5, ARENA_HEIGHT * 0.15, 0.1);
+    transform.set_rotation_euler(0.0, 0.0, FRAC_PI_4 * 0.5);
 
     let sprite = SpriteRender {
         sprite_sheet,
         sprite_number: 1, // player sprite
     };
 
-    world.create_entity()
+//    let move_target = crate::systems::MoveTarget::new(transform.translation().clone())
+//        .with_spring_factors(0.3, 0.0, 0.0);
+
+    // Player
+    let player = world.create_entity()
+        .with(Player::new())
+        .with(crate::systems::FollowMouse {
+            x_ratio: 0.9,
+            y_ratio: 0.0,
+        })
         .with(transform)
+        // .with(move_target)
+        // .with(crate::systems::MouseMoveTargetTag)
+        .build();
+
+    let mut inner_transform = Transform::default();
+    inner_transform.translate_y(-9.5);
+    // Player Visuals
+    world.create_entity()
+        .with(inner_transform)
         .with(Transparent)
         .with(sprite)
+        .with(Parent { entity: player })
         .build();
 }
