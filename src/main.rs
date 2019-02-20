@@ -6,7 +6,7 @@ mod falldown;
 mod systems;
 mod util;
 
-use crate::falldown::Running;
+use crate::falldown::Loading;
 
 use amethyst::{
     core:: {
@@ -44,7 +44,7 @@ fn main() -> amethyst::Result<()> {
     ;
 
     let assets_directory = app_root.join("assets");
-    let mut game = Application::new(assets_directory, Running, game_data)?;
+    let mut game = Application::new(assets_directory, Loading::new(), game_data)?;
 
     game.run();
 

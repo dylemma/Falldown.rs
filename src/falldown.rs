@@ -1,5 +1,5 @@
 use amethyst::{
-    assets::{Asset, AssetStorage, Handle, Loader, ProcessingState},
+    assets::{Asset, AssetStorage, Completion, Handle, Loader, ProcessingState, Progress, ProgressCounter},
     core::{
         nalgebra::Vector3,
         transform::{
@@ -177,21 +177,68 @@ impl From<ColorPallatte> for Result<ProcessingState<ColorPallatte>, Error> {
 
 // ------------------------------------
 
-pub struct Running;
+#[derive(Default)]
+pub struct Loading {
+    progress: ProgressCounter,
+    sprite_sheet: Option<SpriteSheetHandle>,
+}
+impl Loading {
+    pub fn new() -> Loading {
+        Default::default()
+    }
+}
+
+impl SimpleState for Loading {
+    fn on_start(&mut self, data: StateData<GameData>) {
+        let StateData { world, .. } = data;
+        let sprite_sheet = load_sprite_sheet(world, &mut self.progress);
+        self.sprite_sheet = Some(sprite_sheet);
+    }
+
+    fn update(&mut self, _data: &mut StateData<GameData>) -> SimpleTrans {
+        match self.progress.complete() {
+            Completion::Loading => {
+                println!("Loading...");
+                Trans::None
+            },
+            Completion::Failed => {
+                println!("Loading of assets failed. I am slain :(");
+                Trans::Quit
+            },
+            Completion::Complete => {
+                if let Some(sprite_sheet) = &self.sprite_sheet {
+                    Trans::Switch(Box::new(Running {
+                        sprite_sheet: sprite_sheet.clone(),
+                    }))
+                } else {
+                    println!("false start :(");
+                    Trans::None
+                }
+            },
+        }
+    }
+}
+
+// ------------------------------------
+
+pub struct Running {
+    sprite_sheet: SpriteSheetHandle,
+}
 
 impl SimpleState for Running {
     fn on_start(&mut self, data: StateData<'_, GameData<'_, '_>>) {
         let StateData { world, .. } = data;
 
-        let spritesheet_handle = load_sprite_sheet(world);
         // let color_pallatte_handle = load_color_pallatte(world);
 
         init_camera(world);
-        init_spawner(world, spritesheet_handle.clone());
-        init_player(world, spritesheet_handle.clone());
-        init_cursor(world, spritesheet_handle)
+        init_spawner(world, self.sprite_sheet.clone());
+        init_player(world, self.sprite_sheet.clone());
+        init_cursor(world, self.sprite_sheet.clone())
     }
 }
+
+// ------------------------------------
 
 fn init_spawner(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     let pallatte = ColorPallatte {
@@ -213,7 +260,9 @@ fn init_spawner(world: &mut World, sprite_sheet: SpriteSheetHandle) {
         .build();
 }
 
-fn load_sprite_sheet(world: &mut World) -> SpriteSheetHandle {
+// ------------------------------------
+
+fn load_sprite_sheet<P: Progress>(world: &mut World, progress: P) -> SpriteSheetHandle {
     let texture_handle = {
         let loader = world.read_resource::<Loader>();
         let texture_storage = world.read_resource::<AssetStorage<Texture>>();
@@ -221,7 +270,7 @@ fn load_sprite_sheet(world: &mut World) -> SpriteSheetHandle {
             "texture/falldown_spritesheet.png",
             PngFormat,
             TextureMetadata::srgb_scale(),
-            (),
+            progress,
             &texture_storage,
         )
     };
@@ -237,6 +286,8 @@ fn load_sprite_sheet(world: &mut World) -> SpriteSheetHandle {
     )
 }
 
+// ------------------------------------
+
 fn init_camera(world: &mut World) {
     let mut transform = Transform::default();
     transform.set_z(1.0);
@@ -245,6 +296,8 @@ fn init_camera(world: &mut World) {
         .with(transform)
         .build();
 }
+
+// ------------------------------------
 
 fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     let mut transform = Transform::default();
@@ -279,6 +332,8 @@ fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
         .build();
 }
 
+// ------------------------------------
+
 fn init_cursor(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     let sprite = SpriteRender {
         sprite_sheet,
@@ -291,7 +346,6 @@ fn init_cursor(world: &mut World, sprite_sheet: SpriteSheetHandle) {
         transform.set_scale(1.0, ARENA_HEIGHT, 1.0);
         transform.set_x(ARENA_WIDTH * 0.5);
         transform.set_y(ARENA_HEIGHT * 0.5);
-
 
         let follow_mouse = FollowMouse {
             x_ratio: 1.0,
