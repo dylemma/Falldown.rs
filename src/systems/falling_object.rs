@@ -7,11 +7,8 @@ use amethyst::{
         transform::Transform,
     },
 
-    ecs::prelude::{Entities, Join, Read, ReadStorage, WriteExpect, WriteStorage, System},
+    ecs::prelude::{Entities, Join, Read, ReadStorage, WriteStorage, System},
 };
-
-use ncollide3d::world::CollisionObjectHandle;
-use crate::falldown::{EntityCollisionWorld};
 
 pub struct FallingObjectSystem;
 

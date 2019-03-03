@@ -2,22 +2,20 @@ use std::f32::consts::PI;
 
 use amethyst::{
     core::{
-        nalgebra::Isometry3,
         timing::Time,
         transform::Transform,
     },
-    ecs::prelude::{Entities, Join, Read, ReadStorage, System, Write, WriteStorage},
+    ecs::prelude::{Entities, Join, Read, ReadStorage, System, WriteStorage},
     renderer::{Rgba, SpriteRender},
 };
 use ncollide3d::shape::Ball;
 use ncollide3d::shape::ShapeHandle;
-use ncollide3d::world::CollisionGroups;
 use ncollide3d::world::GeometricQueryType;
 use rand::{Rng, thread_rng};
 
-use crate::falldown::{Affiliation, ARENA_HEIGHT, ARENA_WIDTH, Collider, CollisionEntityRef, ColorPallatte, EntityCollisionWorld, FallingObject, Spawner};
+use crate::falldown::{Affiliation, ARENA_HEIGHT, ARENA_WIDTH, Collider2, ColorPallatte, FallingObject, Spawner};
+use crate::falldown::enemy_collision_group;
 use crate::util::RngExtras;
-use ncollide3d::world::CollisionObjectHandle;
 
 pub struct SpawnerSystem;
 
@@ -30,8 +28,7 @@ impl<'s> System<'s> for SpawnerSystem {
         Read<'s, Time>,
         // extra fields required in order to spawn entities with those fields
         Entities<'s>,
-        Write<'s, EntityCollisionWorld>,
-        WriteStorage<'s, Collider>,
+        WriteStorage<'s, Collider2>,
         WriteStorage<'s, Affiliation>,
         WriteStorage<'s, Transform>,
         WriteStorage<'s, FallingObject>,
@@ -45,7 +42,6 @@ impl<'s> System<'s> for SpawnerSystem {
             pallettes,
             time,
             entities,
-            mut collision_world,
             mut collision_objects,
             mut affiliations,
             mut transforms,
@@ -78,24 +74,20 @@ impl<'s> System<'s> for SpawnerSystem {
                     radius: SPAWNED_OBJECT_RADIUS,
                 };
 
-                let collision_object = collision_world.0.add(
-                    *transform.isometry(),
+                let collider = Collider2::new(
                     ShapeHandle::new(Ball::new(SPAWNED_OBJECT_RADIUS)),
-                    CollisionGroups::new(), // TODO: refine this
+                    enemy_collision_group(),
                     GeometricQueryType::Contacts(0f32, 0f32),
-                    CollisionEntityRef::new()
                 );
 
-                let entity = entities.build_entity()
+                entities.build_entity()
                     .with(Affiliation::Enemy, &mut affiliations)
-                    .with(Collider(collision_object.handle()), &mut collision_objects)
+                    .with(collider, &mut collision_objects)
                     .with(transform, &mut transforms)
                     .with(object, &mut falling_objects)
                     .with(spawner.sprite(), &mut sprites)
                     .with(pallatte.next_random(), &mut colors)
                     .build();
-
-//                collision_object.set(entity);
             }
         }
     }

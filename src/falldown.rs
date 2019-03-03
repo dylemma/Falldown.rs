@@ -1,14 +1,16 @@
+use std::collections::VecDeque;
+
 use amethyst::{
     assets::{Asset, AssetStorage, Completion, Handle, Loader, ProcessingState, Progress, ProgressCounter},
     core::{
-        nalgebra::{Vector3},
+        nalgebra::Vector3,
         transform::{
             components::Parent,
             Transform,
         },
     },
+    ecs::prelude::{Component, DenseVecStorage, Entity, HashMapStorage, VecStorage},
     Error,
-    ecs::prelude::{Entity, Component, DenseVecStorage, FlaggedStorage, HashMapStorage, VecStorage},
     prelude::*,
     renderer::{
         Camera, PngFormat, Projection, Rgba, SpriteRender, SpriteSheet, SpriteSheetFormat,
@@ -16,21 +18,31 @@ use amethyst::{
     },
 };
 use ncollide3d::{
-    world::{CollisionWorld},
+    shape::{Ball, ShapeHandle},
+    world::{CollisionGroups, CollisionObjectHandle, CollisionWorld, GeometricQueryType},
 };
 use rand::{seq::SliceRandom, thread_rng};
-use serde::{Serialize, Deserialize};
-use std::collections::VecDeque;
-use std::ops::Deref;
-use ncollide3d::world::CollisionObjectHandle;
-use std::rc::Rc;
-use ncollide3d::shape::ShapeHandle;
-use ncollide3d::world::CollisionGroups;
-use crate::storage::RemovalFlaggedStorage;
-//use crate::storage::RemovalFlaggedStorage;
+use serde::{Deserialize, Serialize};
+
+use crate::storage::{RemovalFlaggedStorage, ToEvent};
+
+// ------------------------------------
 
 pub const ARENA_HEIGHT: f32 = 300.;
 pub const ARENA_WIDTH: f32 = 300.;
+
+// ------------------------------------
+
+pub fn player_collision_group() -> CollisionGroups {
+    CollisionGroups::new()
+        .with_membership(&[0])
+        .with_whitelist(&[1])
+}
+pub fn enemy_collision_group() -> CollisionGroups {
+    CollisionGroups::new()
+        .with_membership(&[1])
+        .with_whitelist(&[0])
+}
 
 // ------------------------------------
 
@@ -255,9 +267,6 @@ impl SimpleState for Running {
     fn on_start(&mut self, data: StateData<'_, GameData<'_, '_>>) {
         let StateData { world, .. } = data;
 
-        // let color_pallatte_handle = load_color_pallatte(world);
-
-//        init_collision_world(world);
         init_camera(world);
         init_spawner(world, self.sprite_sheet.clone());
         init_player(world, self.sprite_sheet.clone());
@@ -268,7 +277,7 @@ impl SimpleState for Running {
         let StateData { world, .. } = data;
         println!("finishing SimpleState");
 
-        for co in world.read_resource::<EntityCollisionWorld>().0.collision_objects() {
+        for co in world.read_resource::<EntityCollisionWorld>().collision_objects() {
             println!("Leftover collision object - {}", co.handle().0)
         }
     }
@@ -276,42 +285,41 @@ impl SimpleState for Running {
 
 // ------------------------------------
 
-#[derive(Clone)]
-pub struct Collider(pub CollisionObjectHandle);
-
-impl Component for Collider {
-    type Storage = RemovalFlaggedStorage<Self>;
+pub struct Collider2 {
+    shape: ShapeHandle<f32>,
+    groups: CollisionGroups,
+    query_type: GeometricQueryType<f32>,
+    pub(crate) handle: Option<CollisionObjectHandle>,
 }
-
-pub struct CollisionEntityRef {
-    entity: Option<Entity>,
-}
-impl CollisionEntityRef {
-    pub fn new() -> CollisionEntityRef {
-        CollisionEntityRef{ entity: None }
-    }
-    pub fn set(&mut self, entity: Entity) {
-        self.entity = Some(entity);
-    }
-    pub fn clear(&mut self) {
-        self.entity = None;
-    }
-    pub fn entity(&self) -> Option<Entity> { self.entity }
-}
-
-pub struct EntityCollisionWorld(
-    pub CollisionWorld<f32, CollisionEntityRef>
-);
-
-impl Default for EntityCollisionWorld {
-    fn default() -> Self {
-        EntityCollisionWorld(CollisionWorld::new(10.0))
+impl ToEvent<Option<CollisionObjectHandle>> for Collider2 {
+    fn to_event(&self) -> Option<CollisionObjectHandle> {
+        self.handle
     }
 }
-//fn init_collision_world(world: &mut World) {
-//    let collision_world: EntityCollisionWorld = CollisionWorld::new(10.0);
-//    world.add_resource(collision_world);
-//}
+impl Component for Collider2 {
+    type Storage = RemovalFlaggedStorage<Self, Option<CollisionObjectHandle>>;
+}
+impl Collider2 {
+    pub fn new(
+        shape: ShapeHandle<f32>,
+        groups: CollisionGroups,
+        query_type: GeometricQueryType<f32>
+    ) -> Collider2 {
+        Collider2 {
+            shape,
+            groups,
+            query_type,
+            handle: None,
+        }
+    }
+    pub fn shape(&self) -> &ShapeHandle<f32> { &self.shape }
+    pub fn groups(&self) -> &CollisionGroups { &self.groups }
+    pub fn query_type(&self) -> &GeometricQueryType<f32> { &self.query_type }
+}
+
+// ------------------------------------
+
+pub type EntityCollisionWorld = CollisionWorld<f32, Entity>;
 
 // ------------------------------------
 
@@ -394,12 +402,17 @@ fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
         .with(transform)
         // .with(move_target)
         // .with(crate::systems::MouseMoveTargetTag)
+        .with(Collider2::new(
+            ShapeHandle::new(Ball::new(15f32)),
+            player_collision_group(),
+            GeometricQueryType::Contacts(0f32, 0f32),
+        ))
         .build();
 
+    // Player Visuals
     let mut inner_transform = Transform::default();
     inner_transform.translate_y(-9.5);
-    // Player Visuals
-    let x = world.create_entity()
+    world.create_entity()
         .with(Affiliation::Player)
         .with(inner_transform)
         .with(Transparent)
