@@ -1,30 +1,40 @@
 use amethyst::{
     assets::{Asset, AssetStorage, Completion, Handle, Loader, ProcessingState, Progress, ProgressCounter},
     core::{
-        nalgebra::Vector3,
+        nalgebra::{Vector3},
         transform::{
             components::Parent,
             Transform,
         },
     },
     Error,
-    ecs::prelude::{Component, DenseVecStorage, HashMapStorage, VecStorage},
+    ecs::prelude::{Entity, Component, DenseVecStorage, FlaggedStorage, HashMapStorage, VecStorage},
     prelude::*,
     renderer::{
         Camera, PngFormat, Projection, Rgba, SpriteRender, SpriteSheet, SpriteSheetFormat,
         SpriteSheetHandle, Texture, TextureMetadata, Transparent,
     },
 };
+use ncollide3d::{
+    world::{CollisionWorld},
+};
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Serialize, Deserialize};
 use std::collections::VecDeque;
+use std::ops::Deref;
+use ncollide3d::world::CollisionObjectHandle;
+use std::rc::Rc;
+use ncollide3d::shape::ShapeHandle;
+use ncollide3d::world::CollisionGroups;
+use crate::storage::RemovalFlaggedStorage;
+//use crate::storage::RemovalFlaggedStorage;
 
 pub const ARENA_HEIGHT: f32 = 300.;
 pub const ARENA_WIDTH: f32 = 300.;
 
 // ------------------------------------
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct FallingObject {
     pub fall_rate: f32,
     pub spin_rate: f32,
@@ -67,6 +77,17 @@ impl Component for Player {
 
 // ------------------------------------
 
+pub enum Affiliation {
+    Player,
+    Enemy
+}
+
+impl Component for Affiliation {
+    type Storage = VecStorage<Self>;
+}
+
+// ------------------------------------
+
 pub struct MovementTrail {
     capacity: usize,
     trail: VecDeque<Vector3<f32>>,
@@ -99,6 +120,7 @@ pub struct Spawner {
     spawn_rate: f32,
     spawn_countdown: f32,
     sprite: SpriteRender,
+    pub remaining: u32,
 }
 
 impl Spawner {
@@ -107,6 +129,7 @@ impl Spawner {
             spawn_rate,
             spawn_countdown: spawn_rate,
             sprite,
+            remaining: 100,
         }
     }
 
@@ -126,6 +149,7 @@ impl Spawner {
     pub fn sprite(&self) -> SpriteRender {
         self.sprite.clone()
     }
+
 }
 
 impl Component for Spawner {
@@ -217,6 +241,8 @@ impl SimpleState for Loading {
             },
         }
     }
+
+
 }
 
 // ------------------------------------
@@ -231,12 +257,61 @@ impl SimpleState for Running {
 
         // let color_pallatte_handle = load_color_pallatte(world);
 
+//        init_collision_world(world);
         init_camera(world);
         init_spawner(world, self.sprite_sheet.clone());
         init_player(world, self.sprite_sheet.clone());
-        init_cursor(world, self.sprite_sheet.clone())
+        init_cursor(world, self.sprite_sheet.clone());
+    }
+
+    fn on_stop(&mut self, data: StateData<GameData>) {
+        let StateData { world, .. } = data;
+        println!("finishing SimpleState");
+
+        for co in world.read_resource::<EntityCollisionWorld>().0.collision_objects() {
+            println!("Leftover collision object - {}", co.handle().0)
+        }
     }
 }
+
+// ------------------------------------
+
+#[derive(Clone)]
+pub struct Collider(pub CollisionObjectHandle);
+
+impl Component for Collider {
+    type Storage = RemovalFlaggedStorage<Self>;
+}
+
+pub struct CollisionEntityRef {
+    entity: Option<Entity>,
+}
+impl CollisionEntityRef {
+    pub fn new() -> CollisionEntityRef {
+        CollisionEntityRef{ entity: None }
+    }
+    pub fn set(&mut self, entity: Entity) {
+        self.entity = Some(entity);
+    }
+    pub fn clear(&mut self) {
+        self.entity = None;
+    }
+    pub fn entity(&self) -> Option<Entity> { self.entity }
+}
+
+pub struct EntityCollisionWorld(
+    pub CollisionWorld<f32, CollisionEntityRef>
+);
+
+impl Default for EntityCollisionWorld {
+    fn default() -> Self {
+        EntityCollisionWorld(CollisionWorld::new(10.0))
+    }
+}
+//fn init_collision_world(world: &mut World) {
+//    let collision_world: EntityCollisionWorld = CollisionWorld::new(10.0);
+//    world.add_resource(collision_world);
+//}
 
 // ------------------------------------
 
@@ -324,7 +399,8 @@ fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     let mut inner_transform = Transform::default();
     inner_transform.translate_y(-9.5);
     // Player Visuals
-    world.create_entity()
+    let x = world.create_entity()
+        .with(Affiliation::Player)
         .with(inner_transform)
         .with(Transparent)
         .with(sprite)

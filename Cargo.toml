@@ -7,5 +7,9 @@ edition = "2018"
 [dependencies]
 #amethyst = "0.10.0"
 amethyst = { git = "https://github.com/amethyst/amethyst", rev = "a66d27b367980d175b2e98d5bb6794e8584eb1c2" }
+nalgebra = "0.17.2"
+ncollide3d = "0.18.2"
 rand = "0.6.5"
 serde = { version = "1.0.88", features = ["derive"] }
+#shred = { version = "0.7.1", features = ["nightly"] }
+hibitset = "0.5.4" # needed by specs to create our own storage. Keep this in sync manually

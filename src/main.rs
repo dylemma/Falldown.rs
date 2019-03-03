@@ -1,8 +1,12 @@
 extern crate amethyst;
+extern crate hibitset;
+extern crate nalgebra as na;
+extern crate ncollide3d;
 extern crate rand;
 extern crate serde;
 
 mod falldown;
+mod storage;
 mod systems;
 mod util;
 
@@ -41,6 +45,7 @@ fn main() -> amethyst::Result<()> {
         )?
         .with(systems::SpawnerSystem, "spawner", &[])
         .with(systems::FallingObjectSystem, "falling_objects", &["spawner"])
+        .with(systems::SyncCollisionWorld::new(), "sync_collision", &[])
     ;
 
     let assets_directory = app_root.join("assets");
