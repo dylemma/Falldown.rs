@@ -285,27 +285,27 @@ impl SimpleState for Running {
 
 // ------------------------------------
 
-pub struct Collider2 {
+pub struct Collider {
     shape: ShapeHandle<f32>,
     groups: CollisionGroups,
     query_type: GeometricQueryType<f32>,
     pub(crate) handle: Option<CollisionObjectHandle>,
 }
-impl ToEvent<Option<CollisionObjectHandle>> for Collider2 {
+impl ToEvent<Option<CollisionObjectHandle>> for Collider {
     fn to_event(&self) -> Option<CollisionObjectHandle> {
         self.handle
     }
 }
-impl Component for Collider2 {
+impl Component for Collider {
     type Storage = RemovalFlaggedStorage<Self, Option<CollisionObjectHandle>>;
 }
-impl Collider2 {
+impl Collider {
     pub fn new(
         shape: ShapeHandle<f32>,
         groups: CollisionGroups,
         query_type: GeometricQueryType<f32>
-    ) -> Collider2 {
-        Collider2 {
+    ) -> Collider {
+        Collider {
             shape,
             groups,
             query_type,
@@ -402,7 +402,7 @@ fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
         .with(transform)
         // .with(move_target)
         // .with(crate::systems::MouseMoveTargetTag)
-        .with(Collider2::new(
+        .with(Collider::new(
             ShapeHandle::new(Ball::new(15f32)),
             player_collision_group(),
             GeometricQueryType::Contacts(0f32, 0f32),

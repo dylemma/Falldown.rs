@@ -13,7 +13,7 @@ use ncollide3d::events::ContactEvent;
 use ncollide3d::world::CollisionObjectHandle;
 use ncollide3d::world::CollisionWorld;
 
-use crate::falldown::{Collider2, EntityCollisionWorld};
+use crate::falldown::{Collider, EntityCollisionWorld};
 use crate::storage::DetailedComponentEvent;
 use crate::storage::RemovalBroadcaster;
 
@@ -33,7 +33,7 @@ impl<'s> System<'s> for SyncCollisionWorld {
     type SystemData = (
         Entities<'s>,
         WriteExpect<'s, EntityCollisionWorld>,
-        WriteStorage<'s, Collider2>,
+        WriteStorage<'s, Collider>,
         ReadStorage<'s, Transform>,
     );
 
@@ -115,7 +115,7 @@ impl<'s> System<'s> for SyncCollisionWorld {
         res.entry::<EntityCollisionWorld>()
             .or_insert_with(|| CollisionWorld::new(10.0));
 
-        let mut collision_storage: WriteStorage<Collider2> = SystemData::fetch(res);
+        let mut collision_storage: WriteStorage<Collider> = SystemData::fetch(res);
         self.collision_reader_id = Some(collision_storage.register_detailed_reader());
     }
 }

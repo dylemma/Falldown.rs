@@ -13,7 +13,7 @@ use ncollide3d::shape::ShapeHandle;
 use ncollide3d::world::GeometricQueryType;
 use rand::{Rng, thread_rng};
 
-use crate::falldown::{Affiliation, ARENA_HEIGHT, ARENA_WIDTH, Collider2, ColorPallatte, FallingObject, Spawner};
+use crate::falldown::{Affiliation, ARENA_HEIGHT, ARENA_WIDTH, Collider, ColorPallatte, FallingObject, Spawner};
 use crate::falldown::enemy_collision_group;
 use crate::util::RngExtras;
 
@@ -28,7 +28,7 @@ impl<'s> System<'s> for SpawnerSystem {
         Read<'s, Time>,
         // extra fields required in order to spawn entities with those fields
         Entities<'s>,
-        WriteStorage<'s, Collider2>,
+        WriteStorage<'s, Collider>,
         WriteStorage<'s, Affiliation>,
         WriteStorage<'s, Transform>,
         WriteStorage<'s, FallingObject>,
@@ -74,7 +74,7 @@ impl<'s> System<'s> for SpawnerSystem {
                     radius: SPAWNED_OBJECT_RADIUS,
                 };
 
-                let collider = Collider2::new(
+                let collider = Collider::new(
                     ShapeHandle::new(Ball::new(SPAWNED_OBJECT_RADIUS)),
                     enemy_collision_group(),
                     GeometricQueryType::Contacts(0f32, 0f32),
