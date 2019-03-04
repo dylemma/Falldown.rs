@@ -46,6 +46,7 @@ fn main() -> amethyst::Result<()> {
         .with(systems::SpawnerSystem, "spawner", &[])
         .with(systems::FallingObjectSystem, "falling_objects", &["spawner"])
         .with(systems::SyncCollisionWorld::new(), "sync_collision", &[])
+        .with(systems::ObjectCollection::new(), "object_collection", &["sync_collision"])
     ;
 
     let assets_directory = app_root.join("assets");

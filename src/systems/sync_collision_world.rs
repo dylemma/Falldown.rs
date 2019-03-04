@@ -7,13 +7,14 @@ use amethyst::{
         prelude::*,
         ReaderId,
     },
+    shrev::EventChannel,
 };
 use hibitset::DrainableBitSet;
 use ncollide3d::events::ContactEvent;
 use ncollide3d::world::CollisionObjectHandle;
 use ncollide3d::world::CollisionWorld;
 
-use crate::falldown::{Collider, EntityCollisionWorld};
+use crate::falldown::{Collider, EntityCollisionWorld, EntityContactEvent};
 use crate::storage::DetailedComponentEvent;
 use crate::storage::RemovalBroadcaster;
 
@@ -35,6 +36,7 @@ impl<'s> System<'s> for SyncCollisionWorld {
         WriteExpect<'s, EntityCollisionWorld>,
         WriteStorage<'s, Collider>,
         ReadStorage<'s, Transform>,
+        Write<'s, EventChannel<EntityContactEvent>>
     );
 
     fn run(&mut self, data: Self::SystemData) {
@@ -43,6 +45,7 @@ impl<'s> System<'s> for SyncCollisionWorld {
             mut collision_world,
             mut colliders,
             transforms,
+            mut contact_events,
         ) = data;
 
         // collect the Added and Removed colliders from the event channel
@@ -101,11 +104,18 @@ impl<'s> System<'s> for SyncCollisionWorld {
         // TODO: do something interesting here instead of just println!
         for event in collision_world.contact_events() {
             if let &ContactEvent::Started(collider1, collider2) = event {
-                println!("Collision started between {:?} and {:?}", collider1, collider2);
+                let entity1 = collision_world.collision_object(collider1)
+                    .expect("ContactEvent involving an object that doesn't exist in the world")
+                    .data();
+                let entity2 = collision_world.collision_object(collider2)
+                    .expect("ContactEvent involving an object that doesn't exist in the world")
+                    .data();
+                contact_events.single_write((*entity1, *entity2, *event));
+//                println!("Collision started between {:?} and {:?}", collider1, collider2);
             }
-            if let &ContactEvent::Stopped(collider1, collider2) = event {
-                println!("Collision ended between {:?} and {:?}", collider1, collider2);
-            }
+//            if let &ContactEvent::Stopped(collider1, collider2) = event {
+//                println!("Collision ended between {:?} and {:?}", collider1, collider2);
+//            }
         }
     }
 

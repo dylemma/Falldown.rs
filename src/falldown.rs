@@ -18,6 +18,7 @@ use amethyst::{
     },
 };
 use ncollide3d::{
+    events::ContactEvent,
     shape::{Ball, ShapeHandle},
     world::{CollisionGroups, CollisionObjectHandle, CollisionWorld, GeometricQueryType},
 };
@@ -89,6 +90,7 @@ impl Component for Player {
 
 // ------------------------------------
 
+#[derive(Debug)]
 pub enum Affiliation {
     Player,
     Enemy
@@ -321,6 +323,8 @@ impl Collider {
 
 pub type EntityCollisionWorld = CollisionWorld<f32, Entity>;
 
+pub type EntityContactEvent = (Entity, Entity, ContactEvent);
+
 // ------------------------------------
 
 fn init_spawner(world: &mut World, sprite_sheet: SpriteSheetHandle) {
@@ -395,13 +399,12 @@ fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     // Player
     let player = world.create_entity()
         .with(Player::new())
+        .with(Affiliation::Player)
         .with(FollowMouse {
             x_ratio: 0.9,
             y_ratio: 0.0,
         })
         .with(transform)
-        // .with(move_target)
-        // .with(crate::systems::MouseMoveTargetTag)
         .with(Collider::new(
             ShapeHandle::new(Ball::new(15f32)),
             player_collision_group(),
@@ -413,7 +416,6 @@ fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
     let mut inner_transform = Transform::default();
     inner_transform.translate_y(-9.5);
     world.create_entity()
-        .with(Affiliation::Player)
         .with(inner_transform)
         .with(Transparent)
         .with(sprite)
