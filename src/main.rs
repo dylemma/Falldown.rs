@@ -3,7 +3,6 @@ extern crate hibitset;
 extern crate nalgebra as na;
 extern crate ncollide3d;
 extern crate rand;
-extern crate serde;
 
 mod falldown;
 mod storage;

@@ -1,7 +1,10 @@
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    convert::From,
+};
 
 use amethyst::{
-    assets::{Asset, AssetStorage, Completion, Handle, Loader, ProcessingState, Progress, ProgressCounter},
+    assets::{AssetStorage, Completion, Loader, Progress, ProgressCounter},
     core::{
         nalgebra::Vector3,
         transform::{
@@ -10,7 +13,6 @@ use amethyst::{
         },
     },
     ecs::prelude::{Component, DenseVecStorage, Entity, HashMapStorage, VecStorage},
-    Error,
     prelude::*,
     renderer::{
         Camera, PngFormat, Projection, Rgba, SpriteRender, SpriteSheet, SpriteSheetFormat,
@@ -22,8 +24,11 @@ use ncollide3d::{
     shape::{Ball, ShapeHandle},
     world::{CollisionGroups, CollisionObjectHandle, CollisionWorld, GeometricQueryType},
 };
-use rand::{seq::SliceRandom, thread_rng};
-use serde::{Deserialize, Serialize};
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+    thread_rng
+};
 
 use crate::storage::{RemovalFlaggedStorage, ToEvent};
 
@@ -90,10 +95,83 @@ impl Component for Player {
 
 // ------------------------------------
 
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum ColorType {
+    Green,
+    Blue,
+    Orange,
+    Purple,
+    Red
+}
+
+impl ColorType {
+    pub fn rgba(&self) -> Rgba {
+        match *self {
+            ColorType::Green => Rgba(0.196, 0.804, 0.196, 1.0), // lime green
+            ColorType::Blue => Rgba(0.000, 0.749, 1.000, 1.0), // deep sky blue
+            ColorType::Orange => Rgba(0.953, 0.640, 0.375, 1.0), // sandybrown
+            ColorType::Purple => Rgba(0.598, 0.195, 0.797, 1.0), // darkorchid
+            ColorType::Red => Rgba(0.926, 0.078, 0.238, 1.0), // crimson
+        }
+    }
+}
+
+impl Distribution<ColorType> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ColorType {
+        match rng.gen_range(0, 5) {
+            0 => ColorType::Green,
+            1 => ColorType::Blue,
+            2 => ColorType::Orange,
+            3 => ColorType::Purple,
+            _ => ColorType::Red,
+        }
+    }
+}
+
+impl Component for ColorType {
+    type Storage = VecStorage<Self>;
+}
+
+// ------------------------------------
+
+pub enum CollectionEvent<'a> {
+    CaughtBlock {
+        player: &'a Entity,
+        block: &'a Entity,
+        color: &'a ColorType,
+        is_correct: bool,
+    },
+    Unknown,
+}
+
+impl<'a> From<(&'a Entity, Option<&'a Affiliation>, &'a Entity, Option<&'a Affiliation>)> for CollectionEvent<'a> {
+
+    fn from(data: (&'a Entity, Option<&'a Affiliation>, &'a Entity, Option<&'a Affiliation>)) -> Self {
+        let (entity1, affiliation1, entity2, affiliation2) = data;
+        match (affiliation1, affiliation2) {
+            (Some(Affiliation::Player(player_color)), Some(Affiliation::Enemy(enemy_color))) => CollectionEvent::CaughtBlock {
+                player: entity1,
+                block: entity2,
+                color: enemy_color,
+                is_correct: *enemy_color == *player_color,
+            },
+            (Some(Affiliation::Enemy(enemy_color)), Some(Affiliation::Player(player_color))) => CollectionEvent::CaughtBlock {
+                player: entity2,
+                block: entity1,
+                color: enemy_color,
+                is_correct: *enemy_color == *player_color,
+            },
+            _ => CollectionEvent::Unknown,
+        }
+    }
+}
+
+// ------------------------------------
+
 #[derive(Debug)]
 pub enum Affiliation {
-    Player,
-    Enemy
+    Player(ColorType),
+    Enemy(ColorType),
 }
 
 impl Component for Affiliation {
@@ -168,49 +246,6 @@ impl Spawner {
 
 impl Component for Spawner {
     type Storage = DenseVecStorage<Self>;
-}
-
-// ------------------------------------
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ColorPallatte {
-    colors: Vec<Rgba>,
-}
-
-impl ColorPallatte {
-    pub fn new(colors: Vec<Rgba>) -> ColorPallatte {
-        ColorPallatte { colors }
-    }
-    pub fn next_random(&self) -> Rgba {
-        match self.colors.choose(&mut thread_rng()) {
-            Some(color) => *color,
-            None => Default::default()
-        }
-    }
-}
-
-impl Default for ColorPallatte {
-    fn default() -> Self {
-        ColorPallatte {
-            colors: vec![Rgba::red(), Rgba::green(), Rgba::blue()],
-        }
-    }
-}
-
-impl Component for ColorPallatte {
-    type Storage = DenseVecStorage<Self>;
-}
-
-impl Asset for ColorPallatte {
-    const NAME: &'static str = "falldown::ColorPallatte";
-    type Data = Self;
-    type HandleStorage = VecStorage<Handle<Self>>;
-}
-
-impl From<ColorPallatte> for Result<ProcessingState<ColorPallatte>, Error> {
-    fn from(p: ColorPallatte) -> Self {
-        Ok(ProcessingState::Loaded(p))
-    }
 }
 
 // ------------------------------------
@@ -328,21 +363,11 @@ pub type EntityContactEvent = (Entity, Entity, ContactEvent);
 // ------------------------------------
 
 fn init_spawner(world: &mut World, sprite_sheet: SpriteSheetHandle) {
-    let pallatte = ColorPallatte {
-        colors: vec![
-            Rgba(0.196, 0.804, 0.196, 1.0), // lime green
-            Rgba(0.000, 0.749, 1.000, 1.0), // deep sky blue
-            Rgba(0.953, 0.640, 0.375, 1.0), // sandybrown
-            Rgba(0.598, 0.195, 0.797, 1.0), // darkorchid
-            Rgba(0.926, 0.078, 0.238, 1.0), // crimson
-        ]
-    };
     let sprite = SpriteRender {
         sprite_sheet,
         sprite_number: 0,
     };
     world.create_entity()
-        .with(pallatte)
         .with(Spawner::new(0.03, sprite))
         .build();
 }
@@ -395,11 +420,12 @@ fn init_player(world: &mut World, sprite_sheet: SpriteSheetHandle) {
         sprite_number: 1, // player sprite
     };
 
+    let color = thread_rng().gen::<ColorType>();
 
     // Player
     let player = world.create_entity()
         .with(Player::new())
-        .with(Affiliation::Player)
+        .with(Affiliation::Player(color))
         .with(FollowMouse {
             x_ratio: 0.9,
             y_ratio: 0.0,

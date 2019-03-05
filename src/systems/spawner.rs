@@ -5,7 +5,7 @@ use amethyst::{
         timing::Time,
         transform::Transform,
     },
-    ecs::prelude::{Entities, Join, Read, ReadStorage, System, WriteStorage},
+    ecs::prelude::{Entities, Join, Read, System, WriteStorage},
     renderer::{Rgba, SpriteRender},
 };
 use ncollide3d::shape::Ball;
@@ -13,7 +13,7 @@ use ncollide3d::shape::ShapeHandle;
 use ncollide3d::world::GeometricQueryType;
 use rand::{Rng, thread_rng};
 
-use crate::falldown::{Affiliation, ARENA_HEIGHT, ARENA_WIDTH, Collider, ColorPallatte, FallingObject, Spawner};
+use crate::falldown::{Affiliation, ARENA_HEIGHT, ARENA_WIDTH, Collider, ColorType, FallingObject, Spawner};
 use crate::falldown::enemy_collision_group;
 use crate::util::RngExtras;
 
@@ -24,7 +24,6 @@ const SPAWNED_OBJECT_RADIUS: f32 = 5.0;
 impl<'s> System<'s> for SpawnerSystem {
     type SystemData = (
         WriteStorage<'s, Spawner>,
-        ReadStorage<'s, ColorPallatte>,
         Read<'s, Time>,
         // extra fields required in order to spawn entities with those fields
         Entities<'s>,
@@ -39,7 +38,6 @@ impl<'s> System<'s> for SpawnerSystem {
     fn run(&mut self, data: Self::SystemData) {
         let (
             mut spawners,
-            pallettes,
             time,
             entities,
             mut collision_objects,
@@ -50,9 +48,8 @@ impl<'s> System<'s> for SpawnerSystem {
             mut colors
         ) = data;
 
-        for (s, p) in (&mut spawners, &pallettes).join() {
+        for (s,) in (&mut spawners,).join() {
             let spawner: &mut Spawner = s;
-            let pallatte: &ColorPallatte = p;
 
             let should_spawn = spawner.advance_and_reset(time.delta_seconds()) && spawner.remaining > 0;
             if should_spawn {
@@ -74,6 +71,8 @@ impl<'s> System<'s> for SpawnerSystem {
                     radius: SPAWNED_OBJECT_RADIUS,
                 };
 
+                let color = rng.gen::<ColorType>();
+
                 let collider = Collider::new(
                     ShapeHandle::new(Ball::new(SPAWNED_OBJECT_RADIUS)),
                     enemy_collision_group(),
@@ -81,12 +80,12 @@ impl<'s> System<'s> for SpawnerSystem {
                 );
 
                 entities.build_entity()
-                    .with(Affiliation::Enemy, &mut affiliations)
+                    .with(Affiliation::Enemy(color.clone()), &mut affiliations)
                     .with(collider, &mut collision_objects)
                     .with(transform, &mut transforms)
                     .with(object, &mut falling_objects)
                     .with(spawner.sprite(), &mut sprites)
-                    .with(pallatte.next_random(), &mut colors)
+                    .with(color.rgba(), &mut colors)
                     .build();
             }
         }
